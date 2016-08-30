@@ -1,0 +1,74 @@
+name = "Stumps grow"
+description = "A new sprout grows on the stump and grows up into tree. The stump rots and dies and plays a role as the manure. "
+author = "pigshaam"
+version = "2.0.2"
+forumthread = ""
+icon_atlas = "modicon.xml"
+icon = "modicon.tex"
+api_version = 6
+client_only_mod = false
+dst_compatible = true
+dont_starve_compatible = true
+reign_of_giants_compatible = true
+all_clients_require_mod = true
+
+configuration_options =
+{
+  {
+    name = "Difficulty",
+    label = "Difficulty",
+    options =	{
+      {description = "Easy",   data = 0},
+      {description = "Normal", data = 1},
+      {description = "Hard",   data = 2},
+    },
+    default = 0,
+  },
+  {
+    name = "GrowthSpeed",
+    label = "Growth Speed",
+    options =	{
+      {description = "0.01 (Very Slow)", data = 0.01},
+      {description = "0.1 (Slow)",       data = 0.1},
+      {description = "0.2",              data = 0.2},
+      {description = "0.3",              data = 0.3},
+      {description = "0.4",              data = 0.4},
+      {description = "0.5",              data = 0.5},
+      {description = "0.6",              data = 0.6},
+      {description = "0.7",              data = 0.7},
+      {description = "0.8",              data = 0.8},
+      {description = "0.9",              data = 0.9},
+      {description = "1.0 (default)",    data = 1.0},
+      {description = "2.0",              data = 2.0},
+      {description = "3.0",              data = 3.0},
+      {description = "4.0",              data = 4.0},
+      {description = "5.0",              data = 5.0},
+      {description = "6.0",              data = 6.0},
+      {description = "7.0",              data = 7.0},
+      {description = "8.0",              data = 8.0},
+      {description = "9.0",              data = 9.0},
+      {description = "10.0",             data = 10.0},
+      {description = "20.0",             data = 20.0},
+      {description = "30.0 (Fast)",      data = 30.0},
+    },
+    default = 1.0,
+  },
+  {
+    name = "Edible",
+    label = "Edible for mob",
+    options =	{
+      {description = "Enabled",  data = true},
+      {description = "Disabled", data = false},
+    },
+    default = true,
+  },
+  {
+    name = "AutoCrumble",
+    label = "Auto crumble burnt tree",
+    options =	{
+      {description = "Enabled",  data = true},
+      {description = "Disabled", data = false},
+    },
+    default = true,
+  },
+}
