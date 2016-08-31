@@ -15,6 +15,7 @@ local OptDebug = false
 local assert = GLOBAL.assert
 local require = GLOBAL.require
 
+
 require "mods"
 
 function debugprint(fnname, ...)
@@ -57,6 +58,7 @@ end
 
 		-- season_trans = {"mild", "wet", "green", "dry"}
 
+
 local function GetThePlayer()
   local player
   if IsDST then
@@ -78,9 +80,9 @@ local function GetTheWorld()
   return world
 end
 
-local IsDST = GLOBAL.TheSim:GetGameID() == "DST"
-local IsSW =  GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano")
-local IsRoG = not IsSW and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS))
+local IsDST = false
+local function IsSW() return GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano") end
+local function IsRoG() return not IsSW() and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)) end
 
 local function IsWinter()
   if IsDST then
@@ -93,7 +95,7 @@ end
 local function IsSummer()
   if IsDST then
     return GLOBAL.TheWorld.state.issummer
-  elseif IsSW then
+  elseif IsSW() then
     return GLOBAL.GetSeasonManager():IsDrySeason()
   else
     return GLOBAL.GetSeasonManager():IsSummer()
@@ -104,9 +106,9 @@ local function IsSpring()
   if IsDST then
     return GLOBAL.TheWorld.state.isspring
   else
-    if IsRoG then
+    if IsRoG() then
       return GLOBAL.GetSeasonManager():IsSpring()
-    elseif IsSW then
+    elseif IsSW() then
       return GLOBAL.GetSeasonManager():IsGreenSeason() or GLOBAL.GetSeasonManager():IsWetSeason()
     else
       return GLOBAL.GetSeasonManager():IsSummer()
@@ -118,9 +120,9 @@ local function IsAutumn()
   if IsDST then
     return GLOBAL.TheWorld.state.isautumn
   else
-    if IsRoG then
+    if IsRoG() then
       return GLOBAL.GetSeasonManager():IsAutumn()
-    elseif IsSW then
+    elseif IsSW() then
       return GLOBAL.GetSeasonManager():IsMildSeason()
     else
       return GLOBAL.GetSeasonManager():IsWinter()
@@ -452,7 +454,7 @@ local function TreePrefabPostInit(inst,treetype)
       GLOBAL.Vector3(0, 65.5/128, 0), -- old
     },
     palmtree = {
-      GLOBAL.Vector3(0,  52.7/128, 0), -- short
+      GLOBAL.Vector3(0,  82.7/128, 0), -- short
       GLOBAL.Vector3(0,  68.2/128, 0), -- normal
       GLOBAL.Vector3(0,  57.8/128, 0), -- tall
       GLOBAL.Vector3(0, 111.2/128, 0), -- monster
@@ -1267,21 +1269,11 @@ local function TreePrefabPostInit(inst,treetype)
     inst.AnimState:SetBank(getAnimBank(inst))
     inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
     inst.Transform:SetScale(inst.stumpscalex, inst.stumpscaley, inst.stumpscalez)
-    inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
-    if not inst.monster then
-      inst.AnimState:SetBuild("tree_leaf_trunk_build")
-      inst.AnimState:SetBank("tree_leaf")
-      inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
-      inst.Transform:SetScale(inst.stumpscalex, inst.stumpscaley, inst.stumpscalez)
-      inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
-    else
-      inst.AnimState:SetBuild("tree_leaf_trunk_build")
-      inst.AnimState:SetBank("tree_leaf_monster")
-      inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
+    if treetype == "deciduoustree" and inst.monster then
       inst.AnimState:OverrideSymbol("legs", "tree_leaf_poison_build", "legs")
       inst.AnimState:OverrideSymbol("legs_mouseover", "tree_leaf_poison_build", "legs_mouseover")
-      inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
     end
+    inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
 
     AddGrowerToStump(inst)
 

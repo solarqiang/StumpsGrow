@@ -14,11 +14,11 @@ function debugprint(fnname, ...)
   print(dbgstr)
 end
 
-local IsDST = GLOBAL.TheSim:GetGameID() == "DST"
+local function IsDST() return GLOBAL.TheSim:GetGameID() == "DST" end
 
 local function GetTheWorld()
   local world
-  if IsDST then
+  if IsDST() then
     world = TheWorld
   else
     world = GetWorld()
@@ -26,8 +26,8 @@ local function GetTheWorld()
   return world
 end
 
-local IsSW =  GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano")
-local IsRoG = not IsSW and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS))
+local function IsSW() return GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano") end
+local function IsRoG() return not IsSW() and (IsDST() or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)) end
 
 local Sproutable = Class(function(self, inst)
   self.sproutable = self

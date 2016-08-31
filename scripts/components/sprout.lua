@@ -26,8 +26,8 @@ local function GetTheWorld()
   return world
 end
 
-local IsRoG = IsDLCEnabled(REIGN_OF_GIANTS)
-local IsSW = IsDLCEnabled(SW)
+local function IsSW() return GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano") end
+local function IsRoG() return not IsSW() and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)) end
 
 local Sprout = Class(function(self, inst)
   self.instsprout = inst
@@ -43,7 +43,7 @@ local Sprout = Class(function(self, inst)
   self.witherable = false
   self.withered = false
   self.protected = false
-  if IsRoG then
+  if IsRoG() then
     self.wither_temp = math.random(TUNING.MIN_PLANT_WITHER_TEMP, TUNING.MAX_PLANT_WITHER_TEMP)
   end
 end)
