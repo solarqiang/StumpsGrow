@@ -1,7 +1,7 @@
-name = "Stumps grow"
+name = "Stumps grow (SW)"
 description = "A new sprout grows on the stump and grows up into tree. The stump rots and dies and plays a role as the manure. "
 author = "pigshaam"
-version = "2.0.2"
+version = "3.0.0"
 forumthread = ""
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
@@ -10,6 +10,7 @@ client_only_mod = false
 dst_compatible = true
 dont_starve_compatible = true
 reign_of_giants_compatible = true
+shipwrecked_compatible = true
 all_clients_require_mod = true
 
 configuration_options =

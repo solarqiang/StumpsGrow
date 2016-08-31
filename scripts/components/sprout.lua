@@ -1,6 +1,7 @@
 require "mods"
 local IsDST = MOD_API_VERSION >= 10
 local IsRoG = IsDLCEnabled(REIGN_OF_GIANTS)
+local IsSW = IsDLCEnabled(SW)
 if IsDST then
   IsRoG = true
 end

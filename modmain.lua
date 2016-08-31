@@ -18,6 +18,7 @@ local require = GLOBAL.require
 require "mods"
 local IsDST = GLOBAL.MOD_API_VERSION >= 10
 local IsRoG = GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)
+local IsSW = IsDLCEnabled(SW)
 if IsDST then
   IsRoG = true
 end
