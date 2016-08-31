@@ -16,12 +16,6 @@ local assert = GLOBAL.assert
 local require = GLOBAL.require
 
 require "mods"
-local IsDST = GLOBAL.MOD_API_VERSION >= 10
-local IsRoG = GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)
-local IsSW = IsDLCEnabled(SW)
-if IsDST then
-  IsRoG = true
-end
 
 function debugprint(fnname, ...)
   if fnname == nil then fnname = "" end
@@ -61,6 +55,8 @@ local function GetDebugString(inst)
   return dmsg
 end
 
+		-- season_trans = {"mild", "wet", "green", "dry"}
+
 local function GetThePlayer()
   local player
   if IsDST then
@@ -71,6 +67,7 @@ local function GetThePlayer()
   return player
 end
 
+
 local function GetTheWorld()
   local world
   if IsDST then
@@ -80,6 +77,10 @@ local function GetTheWorld()
   end
   return world
 end
+
+local IsDST = GLOBAL.TheSim:GetGameID() == "DST"
+local IsSW =  GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano")
+local IsRoG = not IsSW and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS))
 
 local function IsWinter()
   if IsDST then
@@ -92,6 +93,8 @@ end
 local function IsSummer()
   if IsDST then
     return GLOBAL.TheWorld.state.issummer
+  elseif IsSW then
+    return GLOBAL.GetSeasonManager():IsDrySeason()
   else
     return GLOBAL.GetSeasonManager():IsSummer()
   end
@@ -103,6 +106,8 @@ local function IsSpring()
   else
     if IsRoG then
       return GLOBAL.GetSeasonManager():IsSpring()
+    elseif IsSW then
+      return GLOBAL.GetSeasonManager():IsGreenSeason() or GLOBAL.GetSeasonManager():IsWetSeason()
     else
       return GLOBAL.GetSeasonManager():IsSummer()
     end
@@ -115,6 +120,8 @@ local function IsAutumn()
   else
     if IsRoG then
       return GLOBAL.GetSeasonManager():IsAutumn()
+    elseif IsSW then
+      return GLOBAL.GetSeasonManager():IsMildSeason()
     else
       return GLOBAL.GetSeasonManager():IsWinter()
     end
@@ -250,6 +257,8 @@ if OptDebug == true then
     if act.target and
        (act.target.prefab == "evergreen" or
         act.target.prefab == "evergreen_sparse" or
+        act.target.prefab == "jungletree" or
+        act.target.prefab == "palmtree" or
         act.target.prefab == "deciduoustree")
     then
       print(GetDebugString(act.target))
@@ -278,47 +287,6 @@ local seg_time = 30
 local day_segs = 10
 local day_time = seg_time * day_segs
 
-local STUMPS_GROWTIME_evergreen = {
-  short        = {base=7*day_time,      random=2*day_time},       -- short
-  normal       = {base=3.5*day_time,    random=1*day_time},       -- normal
-  tall         = {base=2*day_time,      random=0.5*day_time},     -- tall
-  shortall     = {base=2*day_time/2,    random=0.5*day_time/2},   -- shortall
-  taller       = {base=2*day_time/2.5,  random=0.5*day_time/2.5}, -- taller
-  tallest      = {base=2*day_time/3.0,  random=0.5*day_time/3.0}, -- tallest
-  giant        = {base=2*day_time/3.5,  random=0.5*day_time/3.5}, -- giant
-  massive      = {base=2*day_time/4,    random=0.5*day_time/4},   -- massive
-  old          = {base=12*day_time,     random=4*day_time},       -- old
-  tall_monster = {base=12*day_time,     random=4*day_time},       -- tall_monster
-  stump        = {base=0.75*day_time/2, random=0.25*day_time/2}   -- stump
-}
-
-local STUMPS_GROWTIME_deciduoustree = {
-  short        = {base=3*day_time,      random=1*day_time},       -- short
-  normal       = {base=2*day_time,      random=0.75*day_time},    -- normal
-  tall         = {base=1*day_time,      random=0.5*day_time},     -- tall
-  shortall     = {base=1*day_time/2,    random=0.5*day_time/2},   -- shortall
-  taller       = {base=1*day_time/2.5,  random=0.5*day_time/2.5}, -- taller
-  tallest      = {base=1*day_time/3.0,  random=0.5*day_time/3.0}, -- tallest
-  giant        = {base=1*day_time/3.5,  random=0.5*day_time/3.5}, -- giant
-  massive      = {base=1*day_time/4,    random=0.5*day_time/4},   -- massive
-  old          = {base=10*day_time,     random=4*day_time},       -- old
-  tall_monster = {base=10*day_time,     random=4*day_time},       -- tall_monster
-  stump        = {base=0.75*day_time/2, random=0.25*day_time/2}   -- stump
-}
-
-local BUILDS_evergreen = {
-  normal = "evergreen_new",
-  sparse = "evergreen_new_2",
-}
-
-local BUILDS_deciduoustree = {
-  normal = "tree_leaf_green_build",
-  barren = "tree_leaf_trunk_build",
-  red = "tree_leaf_red_build",
-  orange = "tree_leaf_orange_build",
-  yellow = "tree_leaf_yellow_build",
-  poison = "tree_leaf_poison_build",
-}
 
 local function IsValidStumpProperty(inst)
   if inst.stumpstage == nil or
@@ -362,7 +330,136 @@ end
 
 -------------------------------------------------------------------------------
 
-local function EvergreenPrefabPostInit(inst)
+local function TreePrefabPostInit(inst,treetype)
+
+  local STUMPS_GROWTIME = {
+    evergreen = {
+      short        = {base=7*day_time,      random=2*day_time},       -- short
+      normal       = {base=3.5*day_time,    random=1*day_time},       -- normal
+      tall         = {base=2*day_time,      random=0.5*day_time},     -- tall
+      shortall     = {base=2*day_time/2,    random=0.5*day_time/2},   -- shortall
+      taller       = {base=2*day_time/2.5,  random=0.5*day_time/2.5}, -- taller
+      tallest      = {base=2*day_time/3.0,  random=0.5*day_time/3.0}, -- tallest
+      giant        = {base=2*day_time/3.5,  random=0.5*day_time/3.5}, -- giant
+      massive      = {base=2*day_time/4,    random=0.5*day_time/4},   -- massive
+      old          = {base=12*day_time,     random=4*day_time},       -- old
+      tall_monster = {base=12*day_time,     random=4*day_time},       -- tall_monster
+      stump        = {base=0.75*day_time/2, random=0.25*day_time/2}   -- stump
+    }, 
+    deciduoustree = {
+      short        = {base=3*day_time,      random=1*day_time},       -- short
+      normal       = {base=2*day_time,      random=0.75*day_time},    -- normal
+      tall         = {base=1*day_time,      random=0.5*day_time},     -- tall
+      shortall     = {base=1*day_time/2,    random=0.5*day_time/2},   -- shortall
+      taller       = {base=1*day_time/2.5,  random=0.5*day_time/2.5}, -- taller
+      tallest      = {base=1*day_time/3.0,  random=0.5*day_time/3.0}, -- tallest
+      giant        = {base=1*day_time/3.5,  random=0.5*day_time/3.5}, -- giant
+      massive      = {base=1*day_time/4,    random=0.5*day_time/4},   -- massive
+      old          = {base=10*day_time,     random=4*day_time},       -- old
+      tall_monster = {base=10*day_time,     random=4*day_time},       -- tall_monster
+      stump        = {base=0.75*day_time/2, random=0.25*day_time/2}   -- stump
+    },
+    jungletree = {
+      short        = {base=7*day_time,      random=2*day_time},       -- short
+      normal       = {base=3.5*day_time,    random=1*day_time},       -- normal
+      tall         = {base=2*day_time,      random=0.5*day_time},     -- tall
+      shortall     = {base=2*day_time/2,    random=0.5*day_time/2},   -- shortall
+      taller       = {base=2*day_time/2.5,  random=0.5*day_time/2.5}, -- taller
+      tallest      = {base=2*day_time/3.0,  random=0.5*day_time/3.0}, -- tallest
+      giant        = {base=2*day_time/3.5,  random=0.5*day_time/3.5}, -- giant
+      massive      = {base=2*day_time/4,    random=0.5*day_time/4},   -- massive
+      old          = {base=12*day_time,     random=4*day_time},       -- old
+      tall_monster = {base=12*day_time,     random=4*day_time},       -- tall_monster
+      stump        = {base=0.75*day_time/2, random=0.25*day_time/2}   -- stump
+    }, 
+    palmtree = {
+      short        = {base=3*day_time,      random=1*day_time},       -- short
+      normal       = {base=2*day_time,      random=0.75*day_time},    -- normal
+      tall         = {base=1*day_time,      random=0.5*day_time},     -- tall
+      shortall     = {base=1*day_time/2,    random=0.5*day_time/2},   -- shortall
+      taller       = {base=1*day_time/2.5,  random=0.5*day_time/2.5}, -- taller
+      tallest      = {base=1*day_time/3.0,  random=0.5*day_time/3.0}, -- tallest
+      giant        = {base=1*day_time/3.5,  random=0.5*day_time/3.5}, -- giant
+      massive      = {base=1*day_time/4,    random=0.5*day_time/4},   -- massive
+      old          = {base=10*day_time,     random=4*day_time},       -- old
+      tall_monster = {base=10*day_time,     random=4*day_time},       -- tall_monster
+      stump        = {base=0.75*day_time/2, random=0.25*day_time/2}   -- stump
+    },
+  }
+
+  local BUILDS = {
+    evergreen = {
+      normal = "evergreen_new",
+      sparse = "evergreen_new_2",
+    },
+    deciduoustree = {
+      normal = "tree_leaf_green_build",
+      barren = "tree_leaf_trunk_build",
+      red = "tree_leaf_red_build",
+      orange = "tree_leaf_orange_build",
+      yellow = "tree_leaf_yellow_build",
+      poison = "tree_leaf_poison_build",
+    },
+    jungletree = {
+      normal="tree_jungle_build",
+    },
+    palmtree = {
+      normal="palmtree_build",
+    },
+  }
+  
+  local function getOffspring()
+    local OFFSPRINGS = {
+      evergreen = {
+        normal = "evergreen_short",
+        sparse = "evergreen_sparse_short",
+      },
+      deciduoustree = "deciduoustree_short", 
+      jungletree = "jungletree_short" ,
+      palmtree = "palmtree_short",
+    }
+    local product_prefab = OFFSPRINGS[treetype]
+    if inst.build == "sparse" then
+        product_prefab = "evergreen_sparse_short"
+    end
+    return product_prefab
+  end
+
+  local TREE_SEEDS = {
+      evergreen = "pinecone",
+      deciduoustree = "acorn", 
+      jungletree = "jungletreeseed" ,
+      palmtree = "coconut",
+  }
+  
+  local PLANT_POINTS = {
+    evergreen = {
+      GLOBAL.Vector3(0, 50.5/128, 0), -- short
+      GLOBAL.Vector3(0, 85.5/128, 0), -- normal
+      GLOBAL.Vector3(0, 85.5/128, 0), -- tall
+      GLOBAL.Vector3(0, 65.5/128, 0), -- old
+    },
+    deciduoustree = {
+      GLOBAL.Vector3(0,  52.7/128, 0), -- short
+      GLOBAL.Vector3(0,  68.2/128, 0), -- normal
+      GLOBAL.Vector3(0,  57.8/128, 0), -- tall
+      GLOBAL.Vector3(0, 111.2/128, 0), -- monster
+    },
+    jungletree = {
+      GLOBAL.Vector3(0, 50.5/128, 0), -- short
+      GLOBAL.Vector3(0, 85.5/128, 0), -- normal
+      GLOBAL.Vector3(0, 85.5/128, 0), -- tall
+      GLOBAL.Vector3(0, 65.5/128, 0), -- old
+    },
+    palmtree = {
+      GLOBAL.Vector3(0,  52.7/128, 0), -- short
+      GLOBAL.Vector3(0,  68.2/128, 0), -- normal
+      GLOBAL.Vector3(0,  57.8/128, 0), -- tall
+      GLOBAL.Vector3(0, 111.2/128, 0), -- monster
+    },
+  }
+  
+  inst.PLANT_POINTS = PLANT_POINTS[treetype]
 
   if OptDebug == true then
     inst.GetDebugString = GetDebugString
@@ -382,39 +479,31 @@ local function EvergreenPrefabPostInit(inst)
   inst.OptDebug = OptDebug
   inst.SOMETIMESLIGHT_EASY = SOMETIMESLIGHT_EASY
   inst.SOMETIMESLIGHT_NORMAL = SOMETIMESLIGHT_NORMAL
-
-  local PLANT_POINTS =
-  {
-    GLOBAL.Vector3(0, 50.5/128, 0), -- short
-    GLOBAL.Vector3(0, 85.5/128, 0), -- normal
-    GLOBAL.Vector3(0, 85.5/128, 0), -- tall
-    GLOBAL.Vector3(0, 65.5/128, 0), -- old
-  }
-
-  inst.PLANT_POINTS = PLANT_POINTS
+  
+  local buildspeed = 1.0
+  if inst.build == "sparse" or inst.build == "poison" then buildspeed = 0.5 end
 
   local function GetTimeToGrowFromSproutToTree(inst)
     local iswinter = IsWinter()
     local issummer = IsSummer()
-    local stump_growtime = STUMPS_GROWTIME_evergreen[inst.stumpname]
+    local stump_growtime = STUMPS_GROWTIME[treetype][inst.stumpname]
     if not stump_growtime then
       stump_growtime = {base=math.random(1,10)*day_time, random=0.5*day_time}
     end
-    local buildspeed = {normal=1.0, sparse=0.5}
     local base
     local random
     local growthrate
     if iswinter then
-      growthrate = 0.5 * OptGrowthSpeed * buildspeed[inst.build]
+      growthrate = 0.5 * OptGrowthSpeed * buildspeed
       local daysleft = GetDaysLeftInSeason()
       base = math.min(stump_growtime.base/growthrate, daysleft*day_time+stump_growtime.base*math.random())
       random = stump_growtime.random/growthrate
     elseif issummer then
-      growthrate = 1.5 * OptGrowthSpeed * buildspeed[inst.build]
+      growthrate = 1.5 * OptGrowthSpeed * buildspeed
       base = stump_growtime.base/growthrate
       random = stump_growtime.random/growthrate
     else
-      growthrate = 1.0 * OptGrowthSpeed * buildspeed[inst.build]
+      growthrate = 1.0 * OptGrowthSpeed * buildspeed
       base = stump_growtime.base/growthrate
       random = stump_growtime.random/growthrate
     end
@@ -442,22 +531,21 @@ local function EvergreenPrefabPostInit(inst)
     local iswinter = IsWinter()
     local issummer = IsSummer()
     local growtime
-    local stump_growtime = STUMPS_GROWTIME_evergreen["stump"]
-    local buildspeed = {normal=1.0, sparse=0.5}
+    local stump_growtime = STUMPS_GROWTIME[treetype]["stump"]
     local base
     local random
     local growthrate
     if iswinter then
-      growthrate = 0.5 * OptGrowthSpeed * buildspeed[inst.build]
+      growthrate = 0.5 * OptGrowthSpeed * buildspeed
       --local daysleft = GetDaysLeftInSeason()
       base = stump_growtime.base/growthrate
       random = stump_growtime.random/growthrate
     elseif issummer then
-      growthrate = 1.5 * OptGrowthSpeed * buildspeed[inst.build]
+      growthrate = 1.5 * OptGrowthSpeed * buildspeed
       base = stump_growtime.base/growthrate
       random = stump_growtime.random/growthrate
     else
-      growthrate = 1.0 * OptGrowthSpeed * buildspeed[inst.build]
+      growthrate = 1.0 * OptGrowthSpeed * buildspeed
       base = stump_growtime.base/growthrate
       random = stump_growtime.random/growthrate
     end
@@ -467,13 +555,18 @@ local function EvergreenPrefabPostInit(inst)
   end
 
   local function RebuildStumpProperty(inst, growtime, sproutstage)
-    local growth_stages = {"short","normal","tall"}
     if inst.components.sproutable == nil then inst:AddComponent("sproutable") end
-    inst.stumpstage = math.random(1,3)
+    if not inst.monster then
+        local growth_stages = {"short","normal","tall"}
+        inst.stumpstage = math.random(1,3)
+        inst.stumpanims = growth_stages[inst.stumpstage]
+    else
+        inst.stumpstage = 3
+        inst.stumpanims = "tall_monster"
+    end
     inst.stumpscalex = 1
     inst.stumpscaley = 1
     inst.stumpscalez = 1
-    inst.stumpanims = growth_stages[inst.stumpstage]
     inst.stumpname = inst.stumpanims
     inst.stumpcolorr = 1
     inst.stumpcolorg = 1
@@ -709,12 +802,7 @@ local function EvergreenPrefabPostInit(inst)
 
     CancelAllTasks(inst)
 
-    local product_prefab
-    if inst.build == "normal" then
-      product_prefab = "evergreen_short"
-    elseif inst.build == "sparse" then
-      product_prefab = "evergreen_sparse_short"
-    end
+    local product_prefab = getOffspring()
 
     inst.components.sproutable:MakeGrowTree(product_prefab)
   end
@@ -1160,11 +1248,40 @@ local function EvergreenPrefabPostInit(inst)
       RebuildStumpProperty(inst, nil, 0)
     end
 
-    inst.AnimState:SetBuild(BUILDS_evergreen[inst.build])
-    inst.AnimState:SetBank("evergreen_short")
+    local function getAnimBank(inst)
+      local AnimBank = "evergreen_short"
+      if treetype == "evergreen" then AnimBank = "evergreen_short"
+      elseif treetype  == "deciduoustree" then
+        if not inst.monster then
+          AnimBank = "tree_leaf"
+        else
+          AnimBank = "tree_leaf_monster"
+        end
+      elseif treetype == "jungletree" then AnimBank = "jungletree"
+      elseif treetype == "palmtree" then AnimBank = "palmtree"
+      end
+    return AnimBank
+    end
+
+    inst.AnimState:SetBuild(BUILDS[treetype][inst.build])
+    inst.AnimState:SetBank(getAnimBank(inst))
     inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
     inst.Transform:SetScale(inst.stumpscalex, inst.stumpscaley, inst.stumpscalez)
     inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
+    if not inst.monster then
+      inst.AnimState:SetBuild("tree_leaf_trunk_build")
+      inst.AnimState:SetBank("tree_leaf")
+      inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
+      inst.Transform:SetScale(inst.stumpscalex, inst.stumpscaley, inst.stumpscalez)
+      inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
+    else
+      inst.AnimState:SetBuild("tree_leaf_trunk_build")
+      inst.AnimState:SetBank("tree_leaf_monster")
+      inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
+      inst.AnimState:OverrideSymbol("legs", "tree_leaf_poison_build", "legs")
+      inst.AnimState:OverrideSymbol("legs_mouseover", "tree_leaf_poison_build", "legs_mouseover")
+      inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
+    end
 
     AddGrowerToStump(inst)
 
@@ -1183,15 +1300,22 @@ local function EvergreenPrefabPostInit(inst)
     inst:ListenForEvent("animover", function() inst:Remove() end)
     inst.components.lootdropper:SpawnLootPrefab("charcoal")
     inst.components.lootdropper:DropLoot()
-    if inst.pineconetask then
-      inst.pineconetask:Cancel()
-      inst.pineconetask = nil
+    if treetype ~= "deciduoustree" then
+      if inst.pineconetask then
+        inst.pineconetask:Cancel()
+        inst.pineconetask = nil
+      end
+    else
+      if inst.acorntask then
+        inst.acorntask:Cancel()
+        inst.acorntask = nil
+      end
     end
 
     inst:DoTaskInTime(1, function(inst)
       local target = GLOBAL.FindEntity(inst, 5,
         function(seed) 
-          return seed.prefab == "pinecone"
+          return seed.prefab == TREE_SEEDS[treetype]
         end)
       if target ~= nil then
         target.components.deployable.ondeploy(target, GLOBAL.Vector3(target.Transform:GetWorldPosition()))
@@ -1367,6 +1491,8 @@ local function EvergreenPrefabPostInit(inst)
         if data and data.cycles_left then
           inst.components.grower.cycles_left = data.cycles_left
         end
+        -- deciduoustree bug fix
+        GLOBAL.MakeSmallBurnable(inst)
       end)
     elseif data and data.burnt then
       if OptAutoCrumble == true then
@@ -1389,6 +1515,10 @@ local function EvergreenPrefabPostInit(inst)
 
 end
 
+local function EvergreenPrefabPostInit(inst)
+    TreePrefabPostInit(inst,"evergreen")
+end
+
 AddPrefabPostInit("evergreen", EvergreenPrefabPostInit)
 AddPrefabPostInit("evergreen_normal", EvergreenPrefabPostInit)
 AddPrefabPostInit("evergreen_tall", EvergreenPrefabPostInit)
@@ -1403,1056 +1533,7 @@ AddPrefabPostInit("evergreen_stump", EvergreenPrefabPostInit)
 -------------------------------------------------------------------------------
 
 local function DeciduoustreePrefabPostInit(inst)
-
-  if OptDebug == true then
-    inst.GetDebugString = GetDebugString
-
---  local getdescriptionbase = inst.components.inspectable.GetDescription
---  inst.components.inspectable.GetDescription = function(self, viewer)
---    local msg = GetDebugString(self.inst)
---    print(msg)
---    return msg
---  end
-  end
-
-  inst.OptDifficulty = OptDifficulty
-  inst.OptGrowthSpeed = OptGrowthSpeed
-  inst.OptEdible = OptEdible
-  inst.OptAutoCrumble = OptAutoCrumble
-  inst.OptDebug = OptDebug
-  inst.SOMETIMESLIGHT_EASY = SOMETIMESLIGHT_EASY
-  inst.SOMETIMESLIGHT_NORMAL = SOMETIMESLIGHT_NORMAL
-
-  local PLANT_POINTS =
-  {
-    GLOBAL.Vector3(0,  52.7/128, 0), -- short
-    GLOBAL.Vector3(0,  68.2/128, 0), -- normal
-    GLOBAL.Vector3(0,  57.8/128, 0), -- tall
-    GLOBAL.Vector3(0, 111.2/128, 0), -- monster
-  }
-
-  inst.PLANT_POINTS = PLANT_POINTS
-
-  local function GetTimeToGrowFromSproutToTree(inst)
-    local iswinter = IsWinter()
-    local issummer = IsSummer()
-    local stump_growtime = STUMPS_GROWTIME_deciduoustree[inst.stumpname]
-    if not stump_growtime then
-      stump_growtime = {base=math.random(1,10)*day_time, random=0.5*day_time}
-    end
-    local base
-    local random
-    local growthrate
-    if iswinter then
-      growthrate = 0.1 * OptGrowthSpeed
-      local daysleft = GetDaysLeftInSeason()
-      base = math.min(stump_growtime.base/growthrate, daysleft*day_time+stump_growtime.base*math.random())
-      random = stump_growtime.random/growthrate
-    elseif issummer then
-      growthrate = 2.0 * OptGrowthSpeed
-      base = stump_growtime.base/growthrate
-      random = stump_growtime.random/growthrate
-    else
-      growthrate = 1.0 * OptGrowthSpeed
-      base = stump_growtime.base/growthrate
-      random = stump_growtime.random/growthrate
-    end
-    local timeToGrow = GLOBAL.GetRandomWithVariance(base, random)
-    --debugprint("deciduoustree: GetTimeToGrowTree", timeToGrow)
-    return timeToGrow
-  end
-
-  local function GetTimeToGrowSapling(inst)
-    local growtime = GetTimeToGrowFromSproutToTree(inst)
-    return growtime * 0.8
-  end
-
-  local function GetTimeToGrowTree(inst)
-    local growtime = GetTimeToGrowFromSproutToTree(inst)
-    return growtime * 0.2
-  end
-
-  local function GetTimeToAutoCrumble(inst)
-    local growtime = GetTimeToGrowFromSproutToTree(inst)
-    return growtime * math.random(2.0, 3.0)
-  end
-
-  local function GetTimeToGrowSprout(inst)
-    local iswinter = IsWinter()
-    local issummer = IsSummer()
-    local growtime
-    local stump_growtime = STUMPS_GROWTIME_deciduoustree["stump"]
-    local base
-    local random
-    local growthrate
-    if iswinter then
-      growthrate = 0.1 * OptGrowthSpeed
-      --local daysleft = GetDaysLeftInSeason()
-      base = stump_growtime.base/growthrate
-      random = stump_growtime.random/growthrate
-    elseif issummer then
-      growthrate = 2.0 * OptGrowthSpeed
-      base = stump_growtime.base/growthrate
-      random = stump_growtime.random/growthrate
-    else
-      growthrate = 1.0 * OptGrowthSpeed
-      base = stump_growtime.base/growthrate
-      random = stump_growtime.random/growthrate
-    end
-    growtime = GLOBAL.GetRandomWithVariance(base, random)
-    --debugprint("deciduoustree: GetTimeToGrowSprout", growtime)
-    return growtime
-  end
-
-  local function RebuildStumpProperty(inst, growtime, sproutstage)
-    if not inst.monster then
-      local growth_stages = {"short","normal","tall"}
-      if inst.components.sproutable == nil then inst:AddComponent("sproutable") end
-      inst.stumpstage = math.random(1,3)
-      inst.stumpscalex = 1
-      inst.stumpscaley = 1
-      inst.stumpscalez = 1
-      inst.stumpanims = growth_stages[inst.stumpstage]
-      inst.stumpname = inst.stumpanims
-      inst.stumpcolorr = 1
-      inst.stumpcolorg = 1
-      inst.stumpcolorb = 1
-      inst.stumpcolora = 1
-      if growtime then
-        inst.growtime = growtime + GLOBAL.GetTime()
-      else
-        inst.growtime = nil
-      end
-      inst.stumpplanted = false
-      inst.stumpwithered = false
-      inst.stumpsproutstage = sproutstage
-      inst.stumpproduct = nil
-      inst.stumpflowername = nil
-    else
-      if inst.components.sproutable == nil then inst:AddComponent("sproutable") end
-      inst.stumpstage = 3--4
-      inst.stumpscalex = 1
-      inst.stumpscaley = 1
-      inst.stumpscalez = 1
-      inst.stumpanims = "tall_monster"
-      inst.stumpname = inst.stumpanims
-      inst.stumpcolorr = 1
-      inst.stumpcolorg = 1
-      inst.stumpcolorb = 1
-      inst.stumpcolora = 1
-      if growtime then
-        inst.growtime = growtime + GLOBAL.GetTime()
-      else
-        inst.growtime = nil
-      end
-      inst.stumpplanted = false
-      inst.stumpwithered = false
-      inst.stumpsproutstage = sproutstage
-      inst.stumpproduct = nil
-      inst.stumpflowername = nil
-    end
-  end
-
-  if IsDST then
-    local function OnGrowVeggie(inst)
-      inst.SoundEmitter:PlaySound("dontstarve/common/farm_harvestable")
-    end
-    inst:ListenForEvent("stumps_grow.deciduoustree.growveggie", OnGrowVeggie)
-    inst.deciduoustree_growveggieevent = GLOBAL.net_event(inst.GUID, "stumps_grow.deciduoustree.growveggie")
-  end
-
-  local function DigUpStump(inst, chopper)
-    --debugprint("deciduoustree: DigUpStump")
-    inst.components.lootdropper:SpawnLootPrefab("log")
-    if inst.stumpsproutstage >= 1 and
-       OptDifficulty <= 0 and
-       math.random(1,100) <= 20
-    then
-      inst.components.lootdropper:SpawnLootPrefab("seeds")
-    end
-    if inst.stumpsproutstage >= 1 and
-       OptDifficulty <= 0 and
-       math.random(1,100) <= 10
-    then
-      inst.components.lootdropper:SpawnLootPrefab("silk")
-    end
-    if inst.stumpsproutstage == 5 and
-       OptDifficulty <= 1 and
-       inst.stumpproduct ~= nil
-    then
-      inst.components.lootdropper:SpawnLootPrefab(inst.stumpproduct)
-    end
-    if inst.stumpsproutstage == 6 and
-       inst.stumpproduct ~= nil
-    then
-      inst.components.lootdropper:SpawnLootPrefab(inst.stumpproduct)
-    end
-    if inst.stumpwithered == true then
-      inst.components.lootdropper:SpawnLootPrefab("cutgrass")
-      if OptDebug then assert(inst.stumpsproutstage ~= 5 and inst.stumpsproutstage ~= 4 and inst.stumpsproutstage ~= 3 and inst.stumpsproutstage ~= 2) end
-      --debugprint("deciduoustree: DigUpStump", inst, inst.stumpwithered)
-    end
-    --RemoveChildren(inst)
-    inst:Remove()
-  end
-
-  inst.DigUpStump = DigUpStump
-
-  if IsDST then
-    local function OnGrowSprout(inst)
-      --inst.SoundEmitter:PlaySound("dontstarve/forest/treeGrow")
-      inst.SoundEmitter:PlaySound("dontstarve/common/mushroom_up")
-    end
-    inst:ListenForEvent("stumps_grow.deciduoustree.growsprout", OnGrowSprout)
-    inst.deciduoustree_growsproutevent = GLOBAL.net_event(inst.GUID, "stumps_grow.deciduoustree.growsprout")
-  end
-
-  if IsDST then
-    local function OnGrowSapling(inst)
-      --inst.SoundEmitter:PlaySound("dontstarve/forest/treeGrow")
-      inst.SoundEmitter:PlaySound("dontstarve/common/mushroom_up")
-    end
-    inst:ListenForEvent("stumps_grow.deciduoustree.growsapling", OnGrowSapling)
-    inst.deciduoustree_growsaplingevent = GLOBAL.net_event(inst.GUID, "stumps_grow.deciduoustree.growsapling")
-  end
-
-  if IsDST then
-    local function OnGrowPlant(inst)
-      --inst.SoundEmitter:PlaySound("dontstarve/forest/treeGrow")
-      --inst.SoundEmitter:PlaySound("dontstarve/common/mushroom_up")
-      inst.SoundEmitter:PlaySound("dontstarve/common/farm_harvestable")
-    end
-    inst:ListenForEvent("stumps_grow.deciduoustree.growplant", OnGrowPlant)
-    inst.deciduoustree_growplantevent = GLOBAL.net_event(inst.GUID, "stumps_grow.deciduoustree.growplant")
-  end
-
-  local function OnSproutWithered(sproutable, product_prefab)
-    sproutable.inststump.stumpwithered = true
-    sproutable.inststump.growtime = nil
-    CancelAllTasks(sproutable.inststump)
-    --debugprint("deciduoustree: OnSproutWithered", sproutable.inststump, sproutable.inststump.stumpwithered)
-  end
-
-  local function OnSproutGrowTree(sproutable, product_prefab)
-    --RemoveChildren(sproutable.inststump)
-    sproutable.inststump:Remove()
-  end
-
-  local function OnSproutGrowVeggie(sproutable, product_prefab)
-  end
-
-  local function OnSproutGrowFlower(sproutable, product_prefab, flowername)
-  end
-
-  local function OnSproutGrowPlant(sproutable)
-  end
-
-  local function OnSproutGrowSapling(sproutable)
-  end
-
-  local function OnSproutGrowSprout(sproutable)
-  end
-
-  local function OnSproutStartGrowing(sproutable)
-    sproutable.inststump.stumpproduct = nil
-    sproutable.inststump.stumpflowername = nil
-    sproutable.inststump.stumpwithered = false
-    sproutable.inststump.stumpplanted = false
-  end
-
-  local function OnSproutPlantSeed(sproutable)
-    sproutable.inststump.stumpplanted = true
-  end
-
-  local function OnSproutFertilize(sproutable, fertilizer)
-    if sproutable.inststump.growtime ~= nil then
-      local growtime = sproutable.inststump.growtime - GLOBAL.GetTime()
-      growtime = growtime - fertilizer.components.fertilizer.fertilizervalue
-      if growtime > 0 then
-        sproutable.inststump.growtime = growtime + GLOBAL.GetTime()
-        if sproutable.inststump.growtask ~= nil then
-          sproutable.inststump.growtask:Cancel()
-          sproutable.inststump.growtask = nil
-        end
-        sproutable.inststump.growtask = sproutable.inststump:DoTaskInTime(growtime, sproutable.inststump.GrowNext)
-      else
-        sproutable.inststump.growtime = nil
-        if sproutable.inststump.GrowNext then sproutable.inststump.GrowNext(sproutable.inststump) end
-      end
-    end
-  end
-
-  local function OnSproutHarvest(sproutable, picker)
-    --debugprint("deciduoustree: OnSproutHarvest", sprout, instsprout, sproutable.inststump)
-    sproutable.inststump.stumpplanted = false
-    sproutable.inststump.stumpwithered = false
-    sproutable.inststump.growtime = nil
-    sproutable.inststump.StartGrowing(sproutable.inststump)
-    --debugprint("deciduoustree: OnSproutHarvest", sproutable.inststump, sproutable.inststump.stumpwithered)
-  end
-
-  local function AddGrowerToStump(inst)
-    --debugprint("deciduoustree: AddGrowerToStump")
-    if inst.components.grower then return end
-
-    inst:AddComponent("grower")
-    inst.components.grower.level = 1
-    inst.components.grower.croppoints = {} --GLOBAL.Vector3(0,0,0)
-    inst.components.grower.growrate = 0.1
-    inst.components.grower.max_cycles_left = 6
-    inst.components.grower.cycles_left = inst.components.grower.max_cycles_left
-    inst.components.grower.onplantfn = function()
-      --debugprint("deciduoustree: onplantfn")
-      inst.stumpplanted = true
-      inst.SoundEmitter:PlaySound("dontstarve/wilson/plant_seeds")
-
-      inst.components.sproutable:MakePlantSeed()
-
-      if inst.stumpwithered then -- OnLoad
-        inst.components.sproutable:MakeWithered("cutgrass")
-      elseif OptDifficulty == 2 then
-        local growtime = GetTimeToGrowSprout(inst)
-        local rarity = math.random(1,100)
-        if rarity <= GROWFLOWERRATE then
-          inst.growtime = GLOBAL.GetTime() + growtime
-          inst.growtask = inst:DoTaskInTime(growtime, inst.GrowFlower)
-          inst.GrowNext = inst.GrowFlower
-        else
-          inst.growtime = GLOBAL.GetTime() + growtime
-          inst.growtask = inst:DoTaskInTime(growtime, inst.GrowSprout)
-          inst.GrowNext = inst.GrowSprout
-          --debugprint("deciduoustree: onplantfn", growtime)
-        end
-      end
-    end
-  end
-
-  local function GetSwayLocoParam()
-    local swayloco
-    if IsDay() then
-      swayloco = 1000
-    elseif IsDusk() then
-      swayloco = 2000
-    else
-      swayloco = 5000
-    end
-    if IsWinter() then
-      swayloco = swayloco * 10
-    elseif IsSpring() then
-      swayloco = swayloco * 1
-    elseif IsSummer() then
-      swayloco = swayloco * 0.5
-    elseif IsAutumn() then
-      swayloco = swayloco * 1
-    end
-    return swayloco, 10, 30
-  end
-
-  inst.GetSwayLocoParam = GetSwayLocoParam
-
-  local function GrowTree(inst)
-    --debugprint("deciduoustree: GrowTree")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-
-    inst.stumpsproutstage = 4
-    inst.GrowNext = nil
-
-    CancelAllTasks(inst)
-
-    local product_prefab = "deciduoustree_short"
-    inst.components.sproutable:MakeGrowTree(product_prefab)
-  end
-
-  inst.GrowTree = GrowTree
-
-  local function GrowVeggie(inst)
-    --debugprint("deciduoustree: GrowVeggie")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-
-    inst.stumpsproutstage = 5
-    inst.GrowNext = nil
-
-    CancelAllTasks(inst)
-
-    if inst.stumpproduct == nil then inst.stumpproduct = pickproduct_veggie(inst) end
-    inst.components.sproutable:MakeGrowVeggie(inst.stumpproduct)
-
-    inst.components.grower.isempty = false
-
-    if inst.components.lootdropper then inst:RemoveComponent("lootdropper") end
-    if inst.components.workable then inst:RemoveComponent("workable") end
-    inst:AddComponent("lootdropper")
-    inst:AddComponent("workable")
-    inst.components.workable:SetWorkAction(GLOBAL.ACTIONS.DIG)
-    inst.components.workable:SetOnFinishCallback(inst.DigUpStump)
-    inst.components.workable:SetWorkLeft(1)
-
-    if inst.stumpwithered then
-      inst.components.sproutable:MakeWithered("cutgrass")
-    else
-      if OptEdible and OptDifficulty >= 0 then
-        if not inst.components.sproutable.instsprout.components.edible then inst.components.sproutable.instsprout:AddComponent("edible") end
-        local function oneaten(inst, eater)
-          local instparent = inst.entity:GetParent()
-          instparent:StartGrowing()
-        end
-        inst.components.sproutable.instsprout.components.edible:SetOnEatenFn(oneaten)
-        inst.components.sproutable.instsprout.components.edible.hungervalue = GLOBAL.VEGGIES[inst.stumpproduct].hunger
-        inst.components.sproutable.instsprout.components.edible.healthvalue = GLOBAL.VEGGIES[inst.stumpproduct].health
-        inst.components.sproutable.instsprout.components.edible.sanityvalue = GLOBAL.VEGGIES[inst.stumpproduct].sanity or 0
-        inst.components.sproutable.instsprout.components.edible.foodtype = "VEGGIE"
-        --debugprint("deciduoustree: GrowVeggie: ", inst.components.sproutable.instsprout.components.edible.hungervalue, inst.components.sproutable.instsprout.components.edible.healthvalue, inst.components.sproutable.instsprout.components.edible.sanityvalue, inst.components.sproutable.instsprout.components.edible.foodtype)
-      end
-
-      if not IsDST then
-        inst.SoundEmitter:PlaySound("dontstarve/common/farm_harvestable")
-      else
-        inst.deciduoustree_growveggieevent:push()
-      end
-    end
-  end
-
-  inst.GrowVeggie = GrowVeggie
-
-  local function GrowFlower(inst)
-    --debugprint("deciduoustree: GrowFlower")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-
-    inst.stumpsproutstage = 6
-    inst.GrowNext = nil
-
-    CancelAllTasks(inst)
-
-    if inst.stumpproduct == nil then
-      inst.stumpproduct = "petals"
-      local names = {"f1","f2","f3","f4","f5","f6","f7","f8","f9","f10"}
-      inst.stumpflowername = names[math.random(#names)]
-    end
-    inst.components.sproutable:MakeGrowFlower(inst.stumpproduct, inst.stumpflowername)
-
-    inst.components.grower.isempty = false
-
-    if inst.components.lootdropper then inst:RemoveComponent("lootdropper") end
-    if inst.components.workable then inst:RemoveComponent("workable") end
-    inst:AddComponent("lootdropper")
-    inst:AddComponent("workable")
-    inst.components.workable:SetWorkAction(GLOBAL.ACTIONS.DIG)
-    inst.components.workable:SetOnFinishCallback(inst.DigUpStump)
-    inst.components.workable:SetWorkLeft(1)
-
-    if inst.stumpwithered then
-      inst.components.sproutable:MakeWithered("cutgrass")
-    end
-  end
-
-  inst.GrowFlower = GrowFlower
-
-  local function GrowPlant(inst)
-    --debugprint("deciduoustree: GrowPlant")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-    if OptDebug then assert(inst.build ~= nil) end
-
-    inst.stumpsproutstage = 3
-    inst.GrowNext = inst.GrowVeggie
-
-    CancelAllTasks(inst)
-
-    local growtime
-    if not IsValidStumpProperty(inst) then
-      growtime = GetTimeToGrowTree(inst)
-      RebuildStumpProperty(inst, growtime, 3)
-    elseif inst.growtime == nil then
-      growtime = GetTimeToGrowTree(inst)
-      inst.growtime = GLOBAL.GetTime() + growtime
-    else
-      growtime = inst.growtime - GLOBAL.GetTime()
-    end
-
-    inst.components.sproutable:MakeGrowPlant()
-
-    inst.components.grower.isempty = false
-
-    if inst.components.lootdropper then inst:RemoveComponent("lootdropper") end
-    if inst.components.workable then inst:RemoveComponent("workable") end
-    inst:AddComponent("lootdropper")
-    inst:AddComponent("workable")
-    inst.components.workable:SetWorkAction(GLOBAL.ACTIONS.DIG)
-    inst.components.workable:SetOnFinishCallback(inst.DigUpStump)
-    inst.components.workable:SetWorkLeft(1)
-
-    if inst.stumpwithered then
-      inst.components.sproutable:MakeWithered("cutgrass")
-    else
-      if OptEdible and OptDifficulty >= 0 then
-        if not inst.components.sproutable.instsprout.components.edible then inst.components.sproutable.instsprout:AddComponent("edible") end
-        local function oneaten(inst, eater)
-          local instparent = inst.entity:GetParent()
-          instparent:StartGrowing()
-        end
-        inst.components.sproutable.instsprout.components.edible:SetOnEatenFn(oneaten)
-        inst.components.sproutable.instsprout.components.edible.hungervalue = GLOBAL.TUNING.CALORIES_TINY
-        inst.components.sproutable.instsprout.components.edible.healthvalue = GLOBAL.TUNING.HEALING_TINY
-        inst.components.sproutable.instsprout.components.edible.sanityvalue = 0
-        inst.components.sproutable.instsprout.components.edible.foodtype = "RAW"
-        --debugprint("deciduoustree: GrowPlant: ", inst.components.sproutable.instsprout.components.edible.hungervalue, inst.components.sproutable.instsprout.components.edible.healthvalue, inst.components.sproutable.instsprout.components.edible.sanityvalue, inst.components.sproutable.instsprout.components.edible.foodtype)
-      end
-
-      if not IsDST then
-        --inst.SoundEmitter:PlaySound("dontstarve/forest/treeGrow")
-        --inst.SoundEmitter:PlaySound("dontstarve/common/mushroom_up")
-        inst.SoundEmitter:PlaySound("dontstarve/common/farm_harvestable")
-      else
-        inst.deciduoustree_growplantevent:push()
-      end
-
-      inst.growtask = inst:DoTaskInTime(growtime, inst.GrowVeggie)
-    end
-  end
-
-  inst.GrowPlant = GrowPlant
-
-  local function GrowSapling(inst)
-    --debugprint("deciduoustree: GrowSapling")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-    if OptDebug then assert(inst.build ~= nil) end
-
-    inst.stumpsproutstage = 2
-    inst.GrowNext = inst.GrowTree
-
-    CancelAllTasks(inst)
-
-    local growtime
-    if not IsValidStumpProperty(inst) then
-      growtime = GetTimeToGrowTree(inst)
-      RebuildStumpProperty(inst, growtime, 2)
-    elseif inst.growtime == nil then
-      growtime = GetTimeToGrowTree(inst)
-      inst.growtime = GLOBAL.GetTime() + growtime
-    else
-      growtime = inst.growtime - GLOBAL.GetTime()
-    end
-
-    inst.components.sproutable:MakeGrowSapling()
-
-    inst.components.grower.isempty = false
-
-    if inst.components.lootdropper then inst:RemoveComponent("lootdropper") end
-    if inst.components.workable then inst:RemoveComponent("workable") end
-    inst:AddComponent("lootdropper")
-    inst:AddComponent("workable")
-    inst.components.workable:SetWorkAction(GLOBAL.ACTIONS.DIG)
-    inst.components.workable:SetOnFinishCallback(inst.DigUpStump)
-    inst.components.workable:SetWorkLeft(1)
-
-    if inst.stumpwithered then
-      inst.components.sproutable:MakeWithered("cutgrass")
-    else
-      if not IsDST then
-        --inst.SoundEmitter:PlaySound("dontstarve/forest/treeGrow")
-        inst.SoundEmitter:PlaySound("dontstarve/common/mushroom_up")
-      else
-        inst.deciduoustree_growsaplingevent:push()
-      end
-
-      inst.growtask = inst:DoTaskInTime(growtime, inst.GrowTree)
-    end
-  end
-
-  inst.GrowSapling = GrowSapling
-
-  local function GrowSprout(inst)
-    --debugprint("deciduoustree: GrowSprout")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-    if OptDebug then assert(inst.build ~= nil) end
-
-    inst.stumpsproutstage = 1
-
-    CancelAllTasks(inst)
-
-    local growtime
-    if not IsValidStumpProperty(inst) then
-      growtime = GetTimeToGrowSapling(inst)
-      RebuildStumpProperty(inst, growtime, 1)
-    elseif inst.growtime == nil then
-      growtime = GetTimeToGrowSapling(inst)
-      inst.growtime = GLOBAL.GetTime() + growtime
-    else
-      growtime = inst.growtime - GLOBAL.GetTime()
-    end
-
-    inst.components.sproutable:MakeGrowSprout()
-
-    inst.components.grower.isempty = false
-
-    if inst.components.lootdropper then inst:RemoveComponent("lootdropper") end
-    if inst.components.workable then inst:RemoveComponent("workable") end
-    inst:AddComponent("lootdropper")
-    inst:AddComponent("workable")
-    inst.components.workable:SetWorkAction(GLOBAL.ACTIONS.DIG)
-    inst.components.workable:SetOnFinishCallback(inst.DigUpStump)
-    inst.components.workable:SetWorkLeft(1)
-
-    if inst.stumpwithered then
-      inst.components.sproutable:MakeWithered("cutgrass")
-    else
-      if OptEdible and OptDifficulty >= 2 then
-        if not inst.components.sproutable.instsprout.components.edible then inst.components.sproutable.instsprout:AddComponent("edible") end
-        local function oneaten(inst, eater)
-          local instparent = inst.entity:GetParent()
-          instparent:StartGrowing()
-        end
-        inst.components.sproutable.instsprout.components.edible:SetOnEatenFn(oneaten)
-        inst.components.sproutable.instsprout.components.edible.hungervalue = GLOBAL.TUNING.CALORIES_TINY
-        inst.components.sproutable.instsprout.components.edible.healthvalue = 0
-        inst.components.sproutable.instsprout.components.edible.sanityvalue = 0
-        inst.components.sproutable.instsprout.components.edible.foodtype = "RAW"
-        --debugprint("deciduoustree: GrowSprout: ", inst.components.sproutable.instsprout.components.edible.hungervalue, inst.components.sproutable.instsprout.components.edible.healthvalue, inst.components.sproutable.instsprout.components.edible.sanityvalue, inst.components.sproutable.instsprout.components.edible.foodtype)
-      end
-
-      if not IsDST then
-        inst.SoundEmitter:PlaySound("dontstarve/common/mushroom_up")
-      else
-        inst.deciduoustree_growsproutevent:push()
-      end
-
-      rarity = math.random(1,100)
-      if (OptDifficulty == 0 and not inst.stumpplanted and rarity <= GROWVEGGIERATE) or
-         (OptDifficulty == 0 and inst.stumpplanted and rarity <= GROWVEGGIERATE_PLANTSEEDS)
-      then
-        inst.growtask = inst:DoTaskInTime(growtime, inst.GrowPlant)
-        inst.GrowNext = inst.GrowPlant
-      elseif OptDifficulty == 1 and inst.stumpplanted and rarity <= GROWVEGGIERATE then
-        inst.growtask = inst:DoTaskInTime(growtime, inst.GrowPlant)
-        inst.GrowNext = inst.GrowPlant
-      else
-        inst.growtask = inst:DoTaskInTime(growtime, inst.GrowSapling)
-        inst.GrowNext = inst.GrowSapling
-      end
-    end
-  end
-
-  inst.GrowSprout = GrowSprout
-
-  local function StartGrowing(inst)
-    --debugprint("deciduoustree: StartGrowing")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-    if OptDebug then assert(inst.build ~= nil) end
-
-    inst.stumpsproutstage = 0
-
-    CancelAllTasks(inst)
-
-    local growtime
-    if not IsValidStumpProperty(inst) then
-      growtime = GetTimeToGrowSprout(inst)
-      RebuildStumpProperty(inst, growtime, 0)
-    elseif inst.growtime == nil then
-      growtime = GetTimeToGrowSprout(inst)
-      inst.growtime = GLOBAL.GetTime() + growtime
-    else
-      growtime = inst.growtime - GLOBAL.GetTime()
-    end
-
-    inst.components.sproutable:MakeStartGrowing()
-
-    inst.components.grower:Reset()
-
-    if inst.components.lootdropper then inst:RemoveComponent("lootdropper") end
-    if inst.components.workable then inst:RemoveComponent("workable") end
-    inst:AddComponent("lootdropper")
-    inst:AddComponent("workable")
-    inst.components.workable:SetWorkAction(GLOBAL.ACTIONS.DIG)
-    inst.components.workable:SetOnFinishCallback(inst.DigUpStump)
-    inst.components.workable:SetWorkLeft(1)
-
-    if inst.stumpwithered then
-      inst.components.sproutable:MakeWithered("cutgrass")
-    else
-      local rarity = math.random(1,100)
-      if rarity <= GROWFLOWERRATE then
-        if OptDifficulty <= 1 then
-          inst.growtask = inst:DoTaskInTime(growtime, inst.GrowFlower)
-        else
-          inst.growtime = nil
-        end
-        inst.GrowNext = inst.GrowFlower
-      else
-        if OptDifficulty <= 1 then
-          inst.growtask = inst:DoTaskInTime(growtime, inst.GrowSprout)
-          --debugprint("deciduoustree: StartGrowing", growtime)
-        else
-          inst.growtime = nil
-        end
-        inst.GrowNext = inst.GrowSprout
-      end
-    end
-  end
-
-  inst.StartGrowing = StartGrowing
-
-  local function GrowUp(inst)
-    if OptDifficulty <= 1 and inst.stumpsproutstage == 0 then
-      inst.StartGrowing(inst)
-    elseif inst.stumpsproutstage == 1 then
-      inst.GrowSprout(inst)
-    elseif inst.stumpsproutstage == 2 then
-      inst.GrowSapling(inst)
-    elseif inst.stumpsproutstage == 3 then
-      inst.GrowPlant(inst)
-    elseif inst.stumpsproutstage == 4 then
-      inst.GrowTree(inst)
-    elseif inst.stumpsproutstage == 5 then
-      inst.GrowVeggie(inst)
-    elseif inst.stumpsproutstage == 6 then
-      inst.GrowFlower(inst)
-    end
-  end
-
-  inst.GrowUp = GrowUp
-
-  local function MakeStumpGrow(inst)
-    --debugprint("deciduoustree: MakeStumpGrow")
-    if not inst:IsValid() then
-      --print("Remove a GHOST stump:", inst)
-      CancelAllTasks(inst)
-      RemoveChildren(inst)
-      if inst.components.sproutable and
-         inst.components.sproutable.instsprout
-      then
-        --print("Remove a GHOST stump:instsprout:", inst.components.sproutable.instsprout)
-        inst.components.sproutable.instsprout:Remove()
-        inst:RemoveComponent("sproutable")
-      end
-      return
-    end
-    if OptDebug then assert(inst.build ~= nil) end
-
-    if not IsValidStumpProperty(inst) then
-      RebuildStumpProperty(inst, nil, 0)
-    end
-
-    if not inst.monster then
-      inst.AnimState:SetBuild("tree_leaf_trunk_build")
-      inst.AnimState:SetBank("tree_leaf")
-      inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
-      inst.Transform:SetScale(inst.stumpscalex, inst.stumpscaley, inst.stumpscalez)
-      inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
-    else
-      inst.AnimState:SetBuild("tree_leaf_trunk_build")
-      inst.AnimState:SetBank("tree_leaf_monster")
-      inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
-      inst.AnimState:OverrideSymbol("legs", "tree_leaf_poison_build", "legs")
-      inst.AnimState:OverrideSymbol("legs_mouseover", "tree_leaf_poison_build", "legs_mouseover")
-      inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
-    end
-
-    AddGrowerToStump(inst)
-
-    inst.GrowUp(inst)
-  end
-
-  inst.MakeStumpGrow = MakeStumpGrow
-
-  local function auto_crumble_burnt_tree(inst, chopper)
-    -- DS_RoG and DST : same code
-    inst:RemoveComponent("workable")
-    inst.SoundEmitter:PlaySound("dontstarve/forest/treeCrumble")          
-    --inst.SoundEmitter:PlaySound("dontstarve/wilson/use_axe_tree")          
-    inst.AnimState:PlayAnimation(inst.anims.chop_burnt)
-    GLOBAL.RemovePhysicsColliders(inst)
-    inst:ListenForEvent("animover", function() inst:Remove() end)
-    inst.components.lootdropper:SpawnLootPrefab("charcoal")
-    inst.components.lootdropper:DropLoot()
-    if inst.acorntask then
-      inst.acorntask:Cancel()
-      inst.acorntask = nil
-    end
-
-    inst:DoTaskInTime(1, function(inst)
-      local target = GLOBAL.FindEntity(inst, 5,
-        function(seed) 
-          return seed.prefab == "acorn"
-        end)
-      if target ~= nil then
-        target.components.deployable.ondeploy(target, GLOBAL.Vector3(target.Transform:GetWorldPosition()))
-        --print("target: ", target)
-      end
-    end)
-  end
-
-  local function MakeBurntTreeAutoCrumble(inst)
-    local function autocrumble(inst)
-      if inst:HasTag("burnt") then
-        --inst.components.workable.onfinish(inst, nil)
-        auto_crumble_burnt_tree(inst, nil)
-      else
-        --print("no burnt tag: ", inst, "  fire tag ? : ", inst:HasTag("fire"))
-      end
-    end
-
-    local crumbletime
-    if inst.growtime == nil then
-      crumbletime = GetTimeToAutoCrumble(inst)
-      inst.growtime = crumbletime + GLOBAL.GetTime()
-    else
-      crumbletime = inst.growtime - GLOBAL.GetTime()
-    end
-
-    inst.autocrumbletask = inst:DoTaskInTime(crumbletime, autocrumble)
-    --inst.autocrumbletask = inst:DoTaskInTime(30, autocrumble)
-    --print("d: autocrumbletask", inst)
-  end
-
-  inst.MakeBurntTreeAutoCrumble = MakeBurntTreeAutoCrumble
-
-  inst.OnSproutWithered = OnSproutWithered
-  inst.OnSproutGrowTree = OnSproutGrowTree
-  inst.OnSproutGrowVeggie = OnSproutGrowVeggie
-  inst.OnSproutGrowFlower = OnSproutGrowFlower
-  inst.OnSproutGrowPlant = OnSproutGrowPlant
-  inst.OnSproutGrowSapling = OnSproutGrowSapling
-  inst.OnSproutGrowSprout = OnSproutGrowSprout
-  inst.OnSproutStartGrowing = OnSproutStartGrowing
-  inst.OnSproutPlantSeed = OnSproutPlantSeed
-  inst.OnSproutFertilize = OnSproutFertilize
-  inst.OnSproutHarvest = OnSproutHarvest
-
-  local onsave_base = inst.OnSave
-  inst.OnSave = function(inst, data)
-    onsave_base(inst, data)
-    if inst.build then
-      data.build = inst.build
-    end
-    if inst.growtime ~= nil then
-      data.growtime = inst.growtime - GLOBAL.GetTime()
-    end
-    if inst.stumpstage ~= nil then
-      data.stumpstage = inst.stumpstage
-    end
-    if inst.stumpscalex ~= nil then
-      data.stumpscalex = inst.stumpscalex
-    end
-    if inst.stumpscaley ~= nil then
-      data.stumpscaley = inst.stumpscaley
-    end
-    if inst.stumpscalez ~= nil then
-      data.stumpscalez = inst.stumpscalez
-    end
-    if inst.stumpanims ~= nil then
-      data.stumpanims = inst.stumpanims
-    end
-    if inst.stumpname ~= nil then
-      data.stumpname = inst.stumpname
-    end
-    if inst.stumpcolorr ~= nil then
-      data.stumpcolorr = inst.stumpcolorr
-    end
-    if inst.stumpcolorg ~= nil then
-      data.stumpcolorg = inst.stumpcolorg
-    end
-    if inst.stumpcolorb ~= nil then
-      data.stumpcolorb = inst.stumpcolorb
-    end
-    if inst.stumpcolora ~= nil then
-      data.stumpcolora = inst.stumpcolora
-    end
-    if inst.stumpplanted ~= nil then
-      data.stumpplanted = inst.stumpplanted
-    end
-    if inst.stumpwithered ~= nil then
-      data.stumpwithered = inst.stumpwithered
-    end
-    if inst.stumpsproutstage ~= nil then
-      data.stumpsproutstage = inst.stumpsproutstage
-    end
-    if inst.stumpproduct ~= nil then
-      data.stumpproduct = inst.stumpproduct
-    end
-    if inst.stumpflowername ~= nil then
-      data.stumpflowername = inst.stumpflowername
-    end
-    if inst.components.grower and inst.components.grower.cycles_left ~= nil then
-      --data.crops = inst.components.grower:OnSave().crops
-      data.cycles_left = inst.components.grower.cycles_left
-    end
-  end
-
-  local onload_base = inst.OnLoad
-  inst.OnLoad = function(inst, data)
-    onload_base(inst, data)
---    if inst:HasTag("stump") then
-    if data and data.stump then
-      if inst.components.sproutable == nil then inst:AddComponent("sproutable") end
-      if data and data.build ~= nil then
-        inst.build = data.build
-      end
-      if data and data.growtime ~= nil then
-        inst.growtime = data.growtime + GLOBAL.GetTime()
-      end
-      if data and data.stumpstage ~= nil then
-        inst.stumpstage = data.stumpstage
-      end
-      if data and data.stumpscalex ~= nil then
-        inst.stumpscalex = data.stumpscalex
-      end
-      if data and data.stumpscaley ~= nil then
-        inst.stumpscaley = data.stumpscaley
-      end
-      if data and data.stumpscalez ~= nil then
-        inst.stumpscalez = data.stumpscalez
-      end
-      if data and data.stumpanims ~= nil then
-        inst.stumpanims = data.stumpanims
-      end
-      if data and data.stumpname ~= nil then
-        inst.stumpname = data.stumpname
-      end
-      if data and data.stumpcolorr ~= nil then
-        inst.stumpcolorr = data.stumpcolorr
-      end
-      if data and data.stumpcolorg ~= nil then
-        inst.stumpcolorg = data.stumpcolorg
-      end
-      if data and data.stumpcolorb ~= nil then
-        inst.stumpcolorb = data.stumpcolorb
-      end
-      if data and data.stumpcolora ~= nil then
-        inst.stumpcolora = data.stumpcolora
-      end
-      if data and data.stumpplanted ~= nil then
-        inst.stumpplanted = data.stumpplanted
-      end
-      if data and data.stumpwithered ~= nil then
-        inst.stumpwithered = data.stumpwithered
-      end
-      if data and data.stumpsproutstage ~= nil then
-        inst.stumpsproutstage = data.stumpsproutstage
-      end
-      if data and data.stumpproduct ~= nil then
-        inst.stumpproduct = data.stumpproduct
-      end
-      if data and data.stumpflowername ~= nil then
-        inst.stumpflowername = data.stumpflowername
-      end
-      local stumpplanted = inst.stumpplanted
-      MakeStumpGrow(inst)
-      inst:DoTaskInTime(0, function()
-        if stumpplanted == true and
-           inst.components.grower ~= nil and
-           inst.stumpsproutstage == 0
-        then
-          local seeds = GLOBAL.SpawnPrefab("seeds")
-          inst.components.grower:PlantItem(seeds)
-        end
-        if data and data.cycles_left then
-          inst.components.grower.cycles_left = data.cycles_left
-        end
-        -- deciduoustree bug fix
-        GLOBAL.MakeSmallBurnable(inst)
-      end)
-    elseif data and data.burnt then
-      if OptAutoCrumble == true then
-        MakeBurntTreeAutoCrumble(inst)
-      end
-    end
-  end
-
-  local function OnRemoveEntity(inst)
-    --print("d:OnRemoveEntity:inst", inst)
-    CancelAllTasks(inst)
-    RemoveChildren(inst)
-    if inst.components.sproutable then
-      --print("d:OnRemoveEntity:RemoveComponent:sproutable")
-      inst:RemoveComponent("sproutable")
-    end
-  end
-
-  inst.OnRemoveEntity = OnRemoveEntity
-
+    TreePrefabPostInit(inst,"deciduoustree")
 end
 
 AddPrefabPostInit("deciduoustree", DeciduoustreePrefabPostInit)
@@ -2465,6 +1546,32 @@ AddPrefabPostInit("deciduous_root", DeciduoustreePrefabPostInit)
 
 -------------------------------------------------------------------------------
 
+local function JungletreePrefabPostInit(inst)
+    TreePrefabPostInit(inst,"jungletree")
+end
+
+AddPrefabPostInit("jungletree", JungletreePrefabPostInit)
+AddPrefabPostInit("jungletree_normal", JungletreePrefabPostInit)
+AddPrefabPostInit("jungletree_tall", JungletreePrefabPostInit)
+AddPrefabPostInit("jungletree_short", JungletreePrefabPostInit)
+AddPrefabPostInit("jungletree_burnt", JungletreePrefabPostInit)
+AddPrefabPostInit("jungletree_stump", JungletreePrefabPostInit)
+AddPrefabPostInit("jungle_root", JungletreePrefabPostInit)
+-------------------------------------------------------------------------------
+
+local function PalmtreePrefabPostInit(inst)
+    TreePrefabPostInit(inst,"palmtree")
+end
+
+AddPrefabPostInit("palmtree", PalmtreePrefabPostInit)
+AddPrefabPostInit("palmtree_normal", PalmtreePrefabPostInit)
+AddPrefabPostInit("palmtree_tall", PalmtreePrefabPostInit)
+AddPrefabPostInit("palmtree_short", PalmtreePrefabPostInit)
+AddPrefabPostInit("palmtree_burnt", PalmtreePrefabPostInit)
+AddPrefabPostInit("palmtree_stump", PalmtreePrefabPostInit)
+AddPrefabPostInit("palm_root", PalmtreePrefabPostInit)
+-------------------------------------------------------------------------------
+
 --local function BurnableClassPostConstruct(self)
 local function BurnableComponentPostInit(self)
   local burnable_setonburntfn_base = self.SetOnBurntFn
@@ -2475,6 +1582,8 @@ local function BurnableComponentPostInit(self)
     local function onburnt_for_trees(inst)
       if inst.prefab == "evergreen" or
          inst.prefab == "evergreen_sparse" or
+         inst.prefab == "jungletree" or
+         inst.prefab == "palmtree" or
          inst.prefab == "deciduoustree"
       then
         if inst.components.sproutable and
@@ -2557,6 +1666,8 @@ local function WorkableComponentPostInit(self)
       if inst:IsValid() and
          (inst.prefab == "evergreen" or
           inst.prefab == "evergreen_sparse" or
+          inst.prefab == "jungletree" or
+          inst.prefab == "palmtree" or
           inst.prefab == "deciduoustree") and
          inst.components.growable and
          not inst:HasTag("stump")

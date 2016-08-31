@@ -1,10 +1,4 @@
 require "mods"
-local IsDST = MOD_API_VERSION >= 10
-local IsRoG = IsDLCEnabled(REIGN_OF_GIANTS)
-local IsSW = IsDLCEnabled(SW)
-if IsDST then
-  IsRoG = true
-end
 
 function debugprint(fnname, ...)
   if fnname == nil then fnname = "" end
@@ -20,6 +14,8 @@ function debugprint(fnname, ...)
   print(dbgstr)
 end
 
+local IsDST = GLOBAL.TheSim:GetGameID() == "DST"
+
 local function GetTheWorld()
   local world
   if IsDST then
@@ -29,6 +25,9 @@ local function GetTheWorld()
   end
   return world
 end
+
+local IsSW =  GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano")
+local IsRoG = not IsSW and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS))
 
 local Sproutable = Class(function(self, inst)
   self.sproutable = self

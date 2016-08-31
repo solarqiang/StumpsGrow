@@ -1,10 +1,4 @@
 require "mods"
-local IsDST = MOD_API_VERSION >= 10
-local IsRoG = IsDLCEnabled(REIGN_OF_GIANTS)
-local IsSW = IsDLCEnabled(SW)
-if IsDST then
-  IsRoG = true
-end
 
 function debugprint(fnname, ...)
   if fnname == nil then fnname = "" end
@@ -20,6 +14,8 @@ function debugprint(fnname, ...)
   print(dbgstr)
 end
 
+local IsDST = MOD_API_VERSION >= 10
+
 local function GetTheWorld()
   local world
   if IsDST then
@@ -29,6 +25,9 @@ local function GetTheWorld()
   end
   return world
 end
+
+local IsRoG = IsDLCEnabled(REIGN_OF_GIANTS)
+local IsSW = IsDLCEnabled(SW)
 
 local Sprout = Class(function(self, inst)
   self.instsprout = inst
