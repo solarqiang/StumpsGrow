@@ -27,7 +27,7 @@ local function GetTheWorld()
 end
 
 local function IsSW() return GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano") end
-local function IsRoG() return not IsSW() and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)) end
+local function IsRoG() return not IsSW() and (IsDST or IsDLCEnabled(REIGN_OF_GIANTS)) end
 
 local Sprout = Class(function(self, inst)
   self.instsprout = inst

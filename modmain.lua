@@ -82,7 +82,7 @@ end
 
 local IsDST = false
 local function IsSW() return GetTheWorld():HasTag("shipwrecked") or GetTheWorld():HasTag("volcano") end
-local function IsRoG() return not IsSW() and (IsDST or GLOBAL.IsDLCEnabled(GLOBAL.REIGN_OF_GIANTS)) end
+local function IsRoG() return not IsSW() and (IsDST or IsDLCEnabled(REIGN_OF_GIANTS)) end
 
 local function IsWinter()
   if IsDST then
@@ -412,16 +412,13 @@ local function TreePrefabPostInit(inst,treetype)
   
   local function getOffspring()
     local OFFSPRINGS = {
-      evergreen = {
-        normal = "evergreen_short",
-        sparse = "evergreen_sparse_short",
-      },
+      evergreen = "evergreen_short",
       deciduoustree = "deciduoustree_short", 
       jungletree = "jungletree_short" ,
       palmtree = "palmtree_short",
     }
     local product_prefab = OFFSPRINGS[treetype]
-    if inst.build == "sparse" then
+    if treetype == "evergreen" and inst.build == "sparse" then
         product_prefab = "evergreen_sparse_short"
     end
     return product_prefab
@@ -1267,12 +1264,15 @@ local function TreePrefabPostInit(inst,treetype)
 
     inst.AnimState:SetBuild(BUILDS[treetype][inst.build])
     inst.AnimState:SetBank(getAnimBank(inst))
+    if treetype == "deciduoustree" then 
+      inst.AnimState:SetBuild("tree_leaf_trunk_build")
+      if inst.monster then
+        inst.AnimState:OverrideSymbol("legs", "tree_leaf_poison_build", "legs")
+        inst.AnimState:OverrideSymbol("legs_mouseover", "tree_leaf_poison_build", "legs_mouseover")
+      end
+    end
     inst.AnimState:PushAnimation("stump_"..inst.stumpanims)
     inst.Transform:SetScale(inst.stumpscalex, inst.stumpscaley, inst.stumpscalez)
-    if treetype == "deciduoustree" and inst.monster then
-      inst.AnimState:OverrideSymbol("legs", "tree_leaf_poison_build", "legs")
-      inst.AnimState:OverrideSymbol("legs_mouseover", "tree_leaf_poison_build", "legs_mouseover")
-    end
     inst.AnimState:SetMultColour(inst.stumpcolorr,inst.stumpcolorg,inst.stumpcolorb,inst.stumpcolora)
 
     AddGrowerToStump(inst)
