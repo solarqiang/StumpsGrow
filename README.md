@@ -14,7 +14,7 @@ Besides the original feature of the mod which makes tree(evergreens and deciduou
 ## Please help
 I am still green to Lua language, and I have no idea how to remake the graphics of the mod. So anyone feel free to fork and send pull requests.
 
-# ------------------------------------------------------------------------------------- 
+# ---------------------------------------------------------------- 
 
 ## 声明
 我**不是**这个 mod 的作者，这个 mod 的作者 *pigshaam* 外出非洲至今未归（瞎扯的） 联系不上，[创意工坊](http://steamcommunity.com/sharedfiles/filedetails/?id=365478579)上的一直没更新，所以我就自己动手啦。
